@@ -1,0 +1,26 @@
+{
+  "name": "level-atomichooks",
+  "version": "0.0.0",
+  "description": "Add hooks to levelup that allow atomic reads and writes for intercepting puts and deletes in order to expand functionality.",
+  "main": "index.js",
+  "scripts": {
+    "test": "node ./node_modules/nodeunit/bin/nodeunit ./tests/tests.js && rm -rf ./tests/testdb"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:fritzy/level-atomichooks.git"
+  },
+  "dependencies": {
+    "async": "~0.2.10",
+    "padlock": "~1.1.2"
+  },
+  "author": "Nathan Fritz",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/fritzy/level-atomichooks/issues"
+  },
+  "homepage": "https://github.com/fritzy/level-atomichooks",
+  "devDependencies": {
+    "nodeunit": "^0.8.6"
+  }
+}
