@@ -12,7 +12,9 @@
   },
   "dependencies": {
     "async": "~0.2.10",
-    "padlock": "~1.1.2"
+    "padlock": "~1.1.2",
+    "through": "^2.3.4",
+    "concat-stream": "^1.4.5"
   },
   "author": "Nathan Fritz",
   "license": "MIT",

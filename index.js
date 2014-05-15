@@ -2,6 +2,8 @@ var async = require('async');
 var Padlock = require('padlock').Padlock;
 var lupBatch = require('levelup/lib/batch');
 var util = require('util');
+var through = require('through');
+var concat = require('concat-stream');
 
 function Batch(db) {
     this.db = db;
@@ -43,15 +45,17 @@ function AtomicHooks(db) {
         keyPreProcessors.push(hook);
     };
 
-    db.registerKeyPostprocessor = function (hook) {
-        keyPostProcessors.push(hook);
+    db.registerKeyPostProcessor = function (hook) {
+        keyPostProcessors.unshift(hook);
     };
 
     db.original = {
         put: db.put,
         del: db.del,
         get: db.get,
-        batch: db.batch
+        batch: db.batch,
+        createReadStream: db.createReadStream.bind(db),
+        createWriteStream: db.createWriteStream.bind(db)
     };
 
     db.batch = function (arr, opts, callback) {
@@ -68,6 +72,7 @@ function AtomicHooks(db) {
     }
 
     db.preProcessKey = function (key, opts) {
+        key = key || '';
         for (var i = 0, l = keyPreProcessors.length; i < l; i++) {
             key = keyPreProcessors[i](key, opts);
         }
@@ -75,7 +80,7 @@ function AtomicHooks(db) {
     };
 
     db.postProcessKey = function (key, opts) {
-        for (var i = 0, l = keyPostProcessors.l;
+        for (var i = 0, l = keyPostProcessors.length;
              i < l;
              key = keyPostProcessors[i](key, opts), i++);
         return key;
@@ -130,7 +135,6 @@ function AtomicHooks(db) {
             opts = {};
         }
         key = db.preProcessKey(key, opts);
-        console.log("getting key", key);
         db.original.get.call(db, key, opts, callback);
     };
     
@@ -165,6 +169,33 @@ function AtomicHooks(db) {
                 );
             }
         });
+    };
+
+    db.createReadStream = function (opts) {
+        opts.start = db.preProcessKey(opts.start, opts);
+        opts.end = db.preProcessKey(opts.end, opts);
+
+        var readStreamTransform = through(function (data) {
+            if (typeof data === 'object') {
+                if (data.hasOwnProperty('key')) {
+                    data.key = db.postProcessKey(data.key, opts);
+                }
+            } else if (opts.keys === true) {
+                data = db.postProcessKey(data, opts);
+            }
+            this.emit('data', data);
+        }, undefined, {objectMode: true});
+        var rs = db.original.createReadStream(opts);
+        return rs.pipe(readStreamTransform);
+    };
+    
+    db.createWriteStream = function (opts) {
+        var writeStreamTransform = through(function (data) {
+            data.key = db.postProcessKey(data.key, opts);
+            this.emit('data', data);
+        }, undefined, {objectMode: true});
+        var rs = db.original.createWriteStream(opts);
+        return rs.pipe(writeStreamTransform);
     };
 
     return db;
