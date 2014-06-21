@@ -23,7 +23,14 @@ Batch.prototype.del = function (key, opts) {
 }
 
 
-function AtomicHooks(db) {
+function AtomicHooks(indb) {
+
+    function DB () {}
+    DB.prototype = indb
+    var db = new DB()
+
+    db.parent = indb;
+
     var putHooks = [];
     var delHooks = [];
     var keyPreProcessors = [];
@@ -49,15 +56,6 @@ function AtomicHooks(db) {
         keyPostProcessors.unshift(hook);
     };
 
-    db.original = {
-        put: db.put,
-        del: db.del,
-        get: db.get,
-        batch: db.batch,
-        createReadStream: db.createReadStream.bind(db),
-        createWriteStream: db.createWriteStream.bind(db)
-    };
-
     db.batch = function (arr, opts, callback) {
         var outarrs;
         var batch;
@@ -66,7 +64,7 @@ function AtomicHooks(db) {
                 item.key = db.preProcessKey(item.key, opts);
                 return item;
             });
-            return db.original.batch.call(db, outarrs, opts, callback);
+            return db.parent.batch.call(db, outarrs, opts, callback);
         }
         return new Batch(db);
     }
@@ -91,12 +89,22 @@ function AtomicHooks(db) {
             processor(kv, opts, rcb);
         }, callback);
     };
-    
+
     db.postProcessKV = function (kv, opts, callback) {
         async.reduce(kvPreProcessors, kv, function (kv, processor, rcb) {
             processor(kv, opts, rcb);
         }, callback);
     };
+
+    db.nonlockPut = function (key, value, opts, callback) {
+        key = db.preProcessKey(key, opts);
+        db.parent.put(key, value, opts, callback);
+    }
+    
+    db.nonlockDel = function (key, value, opts, callback) {
+        key = db.preProcessKey(key, opts);
+        db.parent.del(key, opts, callback);
+    }
 
     db.put = function (key, value, opts, callback) {
         if (typeof opts === 'function') {
@@ -105,27 +113,24 @@ function AtomicHooks(db) {
         }
         db.writeLock.runwithlock(function () {
             var batch = db.batch();
-            if (putHooks.length === 0) {
-                batch.put(key, value, opts);
-                batch.write(callback);
-            } else {
-                async.each(putHooks,
-                    function (hook, ecb) {
-                        hook(key, value, opts, batch, ecb);
-                    },
-                    function (err) {
-                        if (err) {
+            //batch preprocesses key for us
+            batch.put(key, value, opts);
+            async.each(putHooks,
+                function (hook, ecb) {
+                    hook(key, value, opts, batch, ecb);
+                },
+                function (err) {
+                    if (err) {
+                        db.writeLock.release();
+                        callback(err);
+                    } else {
+                        batch.write(function (err) {
                             db.writeLock.release();
                             callback(err);
-                        } else {
-                            batch.write(function (err) {
-                                db.writeLock.release();
-                                callback(err);
-                            });
-                        }
+                        });
                     }
-                );
-            }
+                }
+            );
         });
     };
 
@@ -135,39 +140,34 @@ function AtomicHooks(db) {
             opts = {};
         }
         key = db.preProcessKey(key, opts);
-        db.original.get.call(db, key, opts, callback);
+        db.parent.get.call(db, key, opts, callback);
     };
-    
+
     db.del = function (key, opts, callback) {
         if (typeof opts === 'function') {
             callback = opts;
             opts = {};
         }
-        key = db.preProcessKey(key, opts);
 
         db.writeLock.runwithlock(function () {
             var batch = db.batch();
-            if (delHooks.length === 0) {
-                batch.del(key);
-                batch.write(callback);
-            } else {
-                async.each(delHooks,
-                    function (hook, ecb) {
-                        hook(key, opts, batch, ecb);
-                    },
-                    function (err) {
-                        if (err) {
+            batch.del(key, opts);
+            async.each(delHooks,
+                function (hook, ecb) {
+                    hook(key, opts, batch, ecb);
+                },
+                function (err) {
+                    if (err) {
+                        db.writeLock.release();
+                        callback(err);
+                    } else {
+                        batch.write(function (err) {
                             db.writeLock.release();
                             callback(err);
-                        } else {
-                            batch.write(function (err) {
-                                db.writeLock.release();
-                                callback(err);
-                            });
-                        }
+                        });
                     }
-                );
-            }
+                }
+            );
         });
     };
 
@@ -185,16 +185,16 @@ function AtomicHooks(db) {
             }
             this.emit('data', data);
         }, undefined, {objectMode: true});
-        var rs = db.original.createReadStream(opts);
+        var rs = db.parent.createReadStream(opts);
         return rs.pipe(readStreamTransform);
     };
-    
+
     db.createWriteStream = function (opts) {
         var writeStreamTransform = through(function (data) {
             data.key = db.postProcessKey(data.key, opts);
             this.emit('data', data);
         }, undefined, {objectMode: true});
-        var rs = db.original.createWriteStream(opts);
+        var rs = db.parent.createWriteStream(opts);
         return rs.pipe(writeStreamTransform);
     };
 
