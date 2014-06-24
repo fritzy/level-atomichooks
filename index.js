@@ -13,15 +13,14 @@ function Batch(db) {
 util.inherits(Batch, lupBatch);
 
 Batch.prototype.put = function (key, value, opts) {
-    key = this._levelup.preProcessKey(key, opts);
+    key = this.db.preProcessKeyRecursive(key, opts);
     return lupBatch.prototype.put.call(this, key, value, opts);
 };
 
 Batch.prototype.del = function (key, opts) {
-    key = this._levelup.preProcessKey(key, opts);
+    key = this._levelup.preProcessKeyRecursive(key, opts);
     return lupBatch.prototype.del.call(this, key, opts);
-}
-
+};
 
 function AtomicHooks(indb) {
 
@@ -86,6 +85,14 @@ function AtomicHooks(indb) {
         }
         return key;
     };
+
+    db.preProcessKeyRecursive = function (key, opts) {
+        key = db.preProcessKey(key, opts);
+        if (db.parent && db.parent.preProcessKeyRecursive) {
+            key = db.parent.preProcessKeyRecursive(key, opts);
+        }
+        return key;
+    }
 
     db.postProcessKey = function (key, opts) {
         for (var i = 0, l = keyPostProcessors.length;
@@ -190,7 +197,6 @@ function AtomicHooks(indb) {
         opts.end = db.preProcessKey(opts.end, opts);
 
         var readStreamTransform = through(function (data) {
-            console.log("data", data);
             if (typeof data === 'object') {
                 if (data.hasOwnProperty('key')) {
                     data.key = db.postProcessKey(data.key, opts);
