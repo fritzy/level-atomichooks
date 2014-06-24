@@ -33,6 +33,8 @@ function AtomicHooks(indb) {
 
     var putHooks = [];
     var delHooks = [];
+    var getOverride = null;
+    var readStreamOverride = null;
     var keyPreProcessors = [];
     var keyPostProcessors = [];
 
@@ -42,6 +44,14 @@ function AtomicHooks(indb) {
 
     db.registerPutHook = function (hook) {
         putHooks.push(hook);
+    };
+
+    db.registerGetOverride = function (hook) {
+        getOverride = hook;
+    };
+
+    db.registerReadStreamOverride = function (hook) {
+        readStreamOverride = hook;
     };
 
     db.registerDelHook = function (hook) {
@@ -140,7 +150,11 @@ function AtomicHooks(indb) {
             opts = {};
         }
         key = db.preProcessKey(key, opts);
-        db.parent.get.call(db, key, opts, callback);
+        if (typeof getOverride === 'function') {
+            getOverride(key, opts, callback);
+        } else {
+            db.parent.get.call(db, key, opts, callback);
+        }
     };
 
     db.del = function (key, opts, callback) {
@@ -176,6 +190,7 @@ function AtomicHooks(indb) {
         opts.end = db.preProcessKey(opts.end, opts);
 
         var readStreamTransform = through(function (data) {
+            console.log("data", data);
             if (typeof data === 'object') {
                 if (data.hasOwnProperty('key')) {
                     data.key = db.postProcessKey(data.key, opts);
@@ -185,7 +200,12 @@ function AtomicHooks(indb) {
             }
             this.emit('data', data);
         }, undefined, {objectMode: true});
-        var rs = db.parent.createReadStream(opts);
+        var rs;
+        if (typeof readStreamOverride === 'function') {
+            rs = readStreamOverride(opts);
+        } else {
+            rs = db.parent.createReadStream(opts);
+        }
         return rs.pipe(readStreamTransform);
     };
 
