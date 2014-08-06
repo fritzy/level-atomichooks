@@ -1,6 +1,6 @@
 {
   "name": "level-atomichooks",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Add hooks to levelup that allow atomic reads and writes for intercepting puts and deletes in order to expand functionality.",
   "main": "index.js",
   "scripts": {
