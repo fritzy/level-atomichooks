@@ -1,6 +1,6 @@
 var async = require('async');
 var Padlock = require('padlock').Padlock;
-var lupBatch = require('levelup/lib/batch');
+var lupBatch = require('levelout/lib/batch');
 var util = require('util');
 var through = require('through');
 var concat = require('concat-stream');

@@ -15,7 +15,8 @@
     "padlock": "~1.1.2",
     "through": "^2.3.4",
     "concat-stream": "^1.4.5",
-    "node-uuid": "^1.4.1"
+    "node-uuid": "^1.4.1",
+    "levelout": "1.0.0"
   },
   "author": "Nathan Fritz",
   "license": "MIT",
